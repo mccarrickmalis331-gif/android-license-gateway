@@ -287,6 +287,10 @@ function adminPage() {
     }
     function render(){
       q("#count").textContent = "共 " + cards.length + " 张";
+      if (!cards.length) {
+        q("#body").innerHTML = '<tr><td colspan="7" class="muted">暂无卡密。生成后会马上显示在这里。</td></tr>';
+        return;
+      }
       q("#body").innerHTML = cards.map(function(c){
         var controls = c.status === "disabled" ? actionButton("enable", c.cardKey, "启用") : actionButton("disable", c.cardKey, "禁用");
         controls += actionButton("reset", c.cardKey, "重置") + actionButton("delete", c.cardKey, "删除", "danger");
@@ -294,6 +298,16 @@ function adminPage() {
       }).join("");
     }
     async function load(){ cards = (await api("/admin/cards")).cards || []; render(); }
+    function mergeCreated(list){
+      var seen = {};
+      cards = (list || []).concat(cards).filter(function(c){
+        if (!c || !c.cardKey || seen[c.cardKey]) return false;
+        seen[c.cardKey] = true;
+        return true;
+      });
+      render();
+    }
+    function delayedSync(){ setTimeout(function(){ load().catch(function(e){ setStatus(e.message, true); }); }, 6000); }
     function updateSnippets(){
       q("#serverUrl").textContent = serverUrl();
       q("#protectServer").value = q("#protectServer").value || serverUrl();
@@ -365,7 +379,8 @@ function adminPage() {
         q("#createdText").value = list.map(function(c){ return c.cardKey; }).join("\\n");
         q("#created").style.display = "block";
         setStatus("生成成功：" + list.length + " 张");
-        await load();
+        mergeCreated(list);
+        delayedSync();
       } catch (err) {
         setStatus(err.message, true);
       } finally {
@@ -395,7 +410,9 @@ function adminPage() {
         var result = await api("/admin/cards", { method:"DELETE" });
         q("#created").style.display = "none"; q("#createdText").value = "";
         setStatus("已删除 " + result.deleted + " 张卡密");
-        await load();
+        cards = [];
+        render();
+        delayedSync();
       } catch (err) { setStatus(err.message, true); }
     };
     q("#body").onclick = async function(e){
@@ -406,6 +423,10 @@ function adminPage() {
         if (action === "delete") {
           if (!confirm("确认删除 " + key + "？")) return;
           await api("/admin/cards/" + encodeURIComponent(key), { method:"DELETE" });
+          cards = cards.filter(function(c){ return c.cardKey !== key; });
+          render();
+          delayedSync();
+          return setStatus("已删除 " + key);
         } else {
           await api("/admin/cards/" + encodeURIComponent(key), { method:"PATCH", body:JSON.stringify({ action:action }) });
         }
