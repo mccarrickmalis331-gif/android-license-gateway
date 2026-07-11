@@ -209,8 +209,8 @@ function adminPage() {
       <div class="cards" style="margin-top:14px">
         <div>
           <div id="cloudDrop" class="drop">
-            <b>拖拽 APK 到这里</b>
-            <p class="muted">也可以点击选择 APK 文件</p>
+            <b>点击选择 APK 文件</b>
+            <p class="muted">也支持把 APK 拖到这里；内置浏览器不支持拖拽时，请直接点击选择。</p>
             <input id="apkFile" type="file" accept=".apk" style="display:none">
           </div>
           <div class="bar" style="margin-top:12px">
@@ -435,6 +435,7 @@ function adminPage() {
     };
     updateSnippets();
     q("#token").value = localStorage.getItem("adminToken") || q("#token").value;
+    checkApkTool();
     load().catch(function(e){ setStatus(e.message, true); });
   </script>
 </body>
