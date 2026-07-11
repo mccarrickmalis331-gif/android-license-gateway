@@ -1,4 +1,5 @@
 const ORIGIN = "https://android-license-worker.mccarrickmalis331.workers.dev";
+const APK_PROCESSOR_ORIGIN = "";
 
 export default {
   async fetch(request) {
@@ -23,8 +24,11 @@ export default {
         mobile: true,
         capabilities: ["heartbeat", "md5-signature", "rc4-transport", "timestamp-validation"],
         timestampWindowSeconds: 300,
-        apkToolUrl: "http://127.0.0.1:8789"
+        apkToolUrl: APK_PROCESSOR_ORIGIN ? "/apk" : ""
       }, { headers: corsHeaders() });
+    }
+    if (url.pathname === "/apk/status" || url.pathname === "/apk/process" || url.pathname.startsWith("/apk/out/")) {
+      return proxyApk(request, url);
     }
     if (request.method === "GET" && url.pathname === "/") {
       return new Response(adminPage(), {
@@ -66,6 +70,42 @@ async function proxy(request, sourceUrl) {
   } catch (error) {
     return Response.json(
       { ok: false, message: error && error.message ? error.message : "proxy error" },
+      { status: 502, headers: corsHeaders() }
+    );
+  }
+}
+
+async function proxyApk(request, sourceUrl) {
+  if (!APK_PROCESSOR_ORIGIN) {
+    return Response.json(
+      { ok: false, message: "云端 APK 处理服务还没配置。需要先部署 Docker 版 APK 处理器。" },
+      { status: 503, headers: corsHeaders() }
+    );
+  }
+
+  try {
+    let pathname = "/api/process";
+    if (sourceUrl.pathname === "/apk/status") pathname = "/api/status";
+    if (sourceUrl.pathname.startsWith("/apk/out/")) pathname = "/out/" + sourceUrl.pathname.slice("/apk/out/".length);
+    const targetUrl = new URL(pathname + sourceUrl.search, APK_PROCESSOR_ORIGIN);
+    const headers = new Headers(request.headers);
+    ["host", "cf-connecting-ip", "cf-ipcountry", "cf-ray", "cf-visitor", "content-length", "x-forwarded-host"].forEach((key) => headers.delete(key));
+
+    const response = await fetch(targetUrl.toString(), {
+      method: request.method,
+      headers,
+      body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+      redirect: "manual"
+    });
+
+    const outHeaders = new Headers(response.headers);
+    Object.entries(corsHeaders()).forEach(([key, value]) => outHeaders.set(key, value));
+    outHeaders.delete("content-encoding");
+    outHeaders.delete("content-length");
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: outHeaders });
+  } catch (error) {
+    return Response.json(
+      { ok: false, message: error && error.message ? error.message : "apk processor proxy error" },
       { status: 502, headers: corsHeaders() }
     );
   }
@@ -175,14 +215,13 @@ function adminPage() {
           </div>
           <div class="bar" style="margin-top:12px">
             <button id="processApk" type="button" disabled>一键加验证并保护 APK</button>
-            <button id="checkApkTool" class="ghost" type="button">检测电脑工具</button>
-            <button id="openApkTool" class="ghost" type="button">单独打开工具</button>
+            <button id="checkApkTool" class="ghost" type="button">检测云端处理器</button>
           </div>
-          <p class="muted mini">电脑工具需要在本机运行；安卓手机管理卡密可以直接打开这个后台。手机要处理 APK 时，请和电脑连接同一个 Wi-Fi，再打开电脑工具给出的手机地址。</p>
+          <p class="muted mini">云端版本只需要打开这个后台。APK 会上传到云端处理器，处理完成后在这里下载。</p>
         </div>
         <div>
-          <label>电脑 APK 工具地址
-            <input id="localToolUrl" value="http://127.0.0.1:8789">
+          <label>云端 APK 处理入口
+            <input id="localToolUrl" value="/apk" readonly>
           </label>
           <label>统一后台地址
             <input id="protectServer">
@@ -230,7 +269,7 @@ function adminPage() {
     function setStatus(text, isError){ q("#status").textContent = text || ""; q("#status").style.color = isError ? "var(--danger)" : "var(--brand)"; }
     function setApkStatus(text, isError){ q("#apkStatus").textContent = text || ""; q("#apkStatus").style.color = isError ? "#fecaca" : "#d7fff5"; }
     function serverUrl(){ return location.origin; }
-    function localToolUrl(){ return (q("#localToolUrl").value || "http://127.0.0.1:8789").trim().replace(/\/+$/, ""); }
+    function localToolUrl(){ return (q("#localToolUrl").value || "/apk").trim().replace(/\/+$/, ""); }
     function esc(v){ return String(v == null ? "" : v).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
     function dt(s){ return s ? new Date(s * 1000).toLocaleString("zh-CN", {hour12:false}) : "-"; }
     function dur(s){ if (s == null) return "-"; var d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60); if(d)return d+"天"+(h?" "+h+"小时":""); if(h)return h+"小时"+(m?" "+m+"分钟":""); return Math.max(1,m)+"分钟"; }
@@ -270,16 +309,16 @@ function adminPage() {
       setApkStatus("已选择：" + file.name + "\\n点击“一键加验证并保护 APK”开始处理。");
     }
     async function checkApkTool(){
-      setApkStatus("正在检测电脑 APK 工具...");
+      setApkStatus("正在检测云端 APK 处理器...");
       try {
-        var response = await fetch(localToolUrl() + "/api/status", { method:"GET" });
+        var response = await fetch(localToolUrl() + "/status", { method:"GET" });
         var body = await response.json();
         if (!body.ok) throw new Error(body.message || "工具未就绪");
         var urls = (body.accessUrls || []).join("\\n");
         var tools = body.tools || {};
-        setApkStatus("电脑工具正常\\n访问地址：\\n" + urls + "\\n\\nR8 混淆：" + (tools.r8 ? "可用" : "未找到") + "\\nVMP 壳：" + (tools.vmp ? "可用" : "未安装"));
+        setApkStatus("云端处理器正常\\n访问地址：\\n" + (urls || "当前后台转发") + "\\n\\nR8 混淆：" + (tools.r8 ? "可用" : "未找到") + "\\nVMP 壳：" + (tools.vmp ? "可用" : "未安装"));
       } catch (error) {
-        setApkStatus("电脑 APK 工具没有连上。\\n先在电脑启动工具，再点检测。\\n" + (error.message || error), true);
+        setApkStatus("云端 APK 处理器还没有连上。\\n需要先部署 Docker 版 APK 处理器，再把后台里的 APK_PROCESSOR_ORIGIN 填成云端地址。\\n" + (error.message || error), true);
       }
     }
     async function processApk(){
@@ -297,14 +336,14 @@ function adminPage() {
         vmp: q("#protectVmp").checked ? "1" : "0"
       });
       try {
-        var response = await fetch(localToolUrl() + "/api/process?" + qs, { method:"POST", body:selectedApk });
+        var response = await fetch(localToolUrl() + "/process?" + qs, { method:"POST", body:selectedApk });
         var body = await response.json();
         if (!body.ok) throw new Error(body.message || "处理失败");
-        var url = localToolUrl() + body.file;
+        var url = body.file && body.file.startsWith("http") ? body.file : localToolUrl() + body.file;
         setApkStatus("处理完成\\n包名：" + body.packageName + "\\n原启动页：" + body.launcher + "\\n统一后台：" + body.serverUrl + "\\n安全传输：卡密心跳 + MD5 签名 + RC4 加密 + 时间戳验证\\n" + body.obfuscationMessage + "\\n" + body.vmpMessage);
         q("#apkDownload").innerHTML = '<a class="link" href="' + esc(url) + '">下载处理后的 APK：' + esc(body.fileName) + '</a>';
       } catch (error) {
-        setApkStatus("处理失败：\\n" + (error.message || error) + "\\n\\n如果浏览器拦截了本页调用，请点“单独打开工具”，在电脑工具页面拖 APK。", true);
+        setApkStatus("处理失败：\\n" + (error.message || error) + "\\n\\n如果提示云端处理器未配置，说明还差部署 Docker 处理器这一步。", true);
       } finally {
         q("#processApk").disabled = false;
       }
@@ -346,7 +385,6 @@ function adminPage() {
     q("#cloudDrop").ondrop = function(e){ e.preventDefault(); q("#cloudDrop").classList.remove("drag"); setApkFile(e.dataTransfer.files[0]); };
     q("#checkApkTool").onclick = checkApkTool;
     q("#processApk").onclick = processApk;
-    q("#openApkTool").onclick = function(){ location.href = localToolUrl(); };
     var installPrompt;
     window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); installPrompt=e; q("#installApp").hidden=false; });
     q("#installApp").onclick = async function(){ if(!installPrompt)return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt=null; q("#installApp").hidden=true; };
