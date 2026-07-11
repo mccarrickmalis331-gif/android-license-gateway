@@ -7,6 +7,25 @@ export default {
     }
 
     const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/manifest.webmanifest") {
+      return Response.json({
+        name: "安卓卡密验证后台",
+        short_name: "卡密后台",
+        start_url: "/",
+        display: "standalone",
+        background_color: "#f5f7fb",
+        theme_color: "#1769aa"
+      }, { headers: { "content-type": "application/manifest+json; charset=utf-8", ...corsHeaders() } });
+    }
+    if (request.method === "GET" && url.pathname === "/api/dashboard-info") {
+      return Response.json({
+        ok: true,
+        mobile: true,
+        capabilities: ["heartbeat", "md5-signature", "rc4-transport", "timestamp-validation"],
+        timestampWindowSeconds: 300,
+        apkToolUrl: "http://127.0.0.1:8789"
+      }, { headers: corsHeaders() });
+    }
     if (request.method === "GET" && url.pathname === "/") {
       return new Response(adminPage(), {
         headers: {
@@ -66,6 +85,8 @@ function adminPage() {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#1769aa">
+  <link rel="manifest" href="/manifest.webmanifest">
   <title>卡密验证系统</title>
   <style>
     :root{color-scheme:light;--bg:#f5f7fb;--panel:#fff;--line:#dfe5ef;--text:#172033;--muted:#667085;--brand:#1769aa;--danger:#b42318}
@@ -76,7 +97,9 @@ function adminPage() {
     textarea{height:110px;font-family:Consolas,monospace}.code{height:180px}.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     button{min-height:38px;border:0;border-radius:6px;background:var(--brand);color:white;padding:0 13px;cursor:pointer;font-weight:700}button:disabled{opacity:.55;cursor:not-allowed}.ghost{background:#fff;color:var(--text);border:1px solid var(--line)}.danger{background:#fff;color:var(--danger);border:1px solid #f0b8b0}
     .muted{color:var(--muted);font-size:13px}.status{min-height:22px;margin-top:10px;font-weight:700}.created{display:none}.table{overflow:auto}table{width:100%;min-width:960px;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.key{font-family:Consolas,monospace;font-weight:700}.actions{display:flex;gap:6px;flex-wrap:wrap}
-    .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:800px){.grid,.cards{grid-template-columns:1fr}.wrap{padding:12px}}
+    .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}.security{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.security>div{border:1px solid var(--line);padding:12px;border-radius:6px}.security b{display:block;margin-bottom:5px}.ok{color:#067647}
+    .flow{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}.flow>div{border:1px solid var(--line);border-radius:6px;padding:12px;background:#fbfcff}.flow b{display:block;margin-bottom:4px}.drop{border:2px dashed #8aa4c4;border-radius:8px;padding:24px;text-align:center;background:#f8fbff;cursor:pointer}.drop.drag{background:#eaf4ff}.terminal{white-space:pre-wrap;background:#111827;color:#d7fff5;padding:14px;border-radius:8px;min-height:126px}.wide{grid-column:1/-1}.mini{font-size:12px}.link{color:var(--brand);font-weight:700}
+    @media(max-width:800px){.grid,.cards,.security,.flow{grid-template-columns:1fr}.wrap{padding:12px}.top h1{font-size:24px}.panel{padding:13px}button{min-height:44px}.table{margin:0 -13px;padding:0 13px}}
   </style>
 </head>
 <body>
@@ -94,6 +117,16 @@ function adminPage() {
         <input id="token" type="password" value="change_this_admin_token">
       </label>
       <div id="status" class="status"></div>
+    </section>
+
+    <section class="panel">
+      <div class="bar"><h2 style="margin:0">统一安全验证</h2><span class="muted">安卓与后台使用同一套协议</span></div>
+      <div class="security" style="margin-top:12px">
+        <div><b>卡密心跳</b><span class="ok">已启用</span><p class="muted">后台记录最后心跳时间，失效或禁用后拒绝进入。</p></div>
+        <div><b>MD5 签名</b><span class="ok">已启用</span><p class="muted">请求和响应均验签，检测内容被修改。</p></div>
+        <div><b>RC4 加密传输</b><span class="ok">已启用</span><p class="muted">业务数据加密后再通过 HTTPS 发送。</p></div>
+        <div><b>时间戳验证</b><span class="ok">已启用</span><p class="muted">允许误差 5 分钟，并配合随机数阻止重复请求。</p></div>
+      </div>
     </section>
 
     <section class="panel">
@@ -126,32 +159,63 @@ function adminPage() {
     </section>
 
     <section class="panel">
-      <h2>一键接入验证框</h2>
-      <div class="cards">
+      <div class="bar"><h2 style="margin:0">验证 + APK 保护一体化</h2><span class="muted">生成卡密、注入验证框、混淆、可选 VMP 壳放在同一套后台里</span></div>
+      <div class="flow">
+        <div><b>1. 生成卡密</b><span class="muted">上方直接生成各种时长的卡密。</span></div>
+        <div><b>2. 拖入 APK</b><span class="muted">选择已经编译好的 APK 文件。</span></div>
+        <div><b>3. 加验证和混淆</b><span class="muted">自动加入卡密窗口、心跳、MD5、RC4、时间戳。</span></div>
+        <div><b>4. 下载成品</b><span class="muted">输出重新签名后的保护 APK。</span></div>
+      </div>
+      <div class="cards" style="margin-top:14px">
         <div>
-          <p class="muted">手机端现在可以在验证页直接改后台地址；下面是当前后台地址对应的配置代码。</p>
-          <button id="copyConfig" type="button">复制安卓配置</button>
-          <textarea id="configCode" class="code" readonly></textarea>
+          <div id="cloudDrop" class="drop">
+            <b>拖拽 APK 到这里</b>
+            <p class="muted">也可以点击选择 APK 文件</p>
+            <input id="apkFile" type="file" accept=".apk" style="display:none">
+          </div>
+          <div class="bar" style="margin-top:12px">
+            <button id="processApk" type="button" disabled>一键加验证并保护 APK</button>
+            <button id="checkApkTool" class="ghost" type="button">检测电脑工具</button>
+            <button id="openApkTool" class="ghost" type="button">单独打开工具</button>
+          </div>
+          <p class="muted mini">电脑工具需要在本机运行；安卓手机管理卡密可以直接打开这个后台。手机要处理 APK 时，请和电脑连接同一个 Wi-Fi，再打开电脑工具给出的手机地址。</p>
         </div>
         <div>
-          <p class="muted">本地工程已加入脚本：<b>tools/apply-license-box.ps1</b>。给其他 Android 项目一键加验证框时运行它。</p>
-          <button id="copyInstall" class="ghost" type="button">复制一键接入命令</button>
-          <textarea id="installCode" class="code" readonly></textarea>
+          <label>电脑 APK 工具地址
+            <input id="localToolUrl" value="http://127.0.0.1:8789">
+          </label>
+          <label>统一后台地址
+            <input id="protectServer">
+          </label>
+          <div class="cards" style="grid-template-columns:1fr 1fr;margin-top:8px">
+            <label>App ID<input id="protectAppId" value="demo_android_app"></label>
+            <label>App Secret<input id="protectSecret" type="password" value="change_this_app_secret"></label>
+          </div>
+          <label>RC4 Key
+            <input id="protectRc4" type="password" value="change_this_rc4_key">
+          </label>
+          <p><label><input id="protectObfuscate" type="checkbox" checked> 使用 R8 混淆验证模块</label></p>
+          <p><label><input id="protectVmp" type="checkbox"> 完成后调用 VMP 壳</label></p>
+        </div>
+        <div class="wide">
+          <div id="apkStatus" class="terminal">等待 APK...</div>
+          <p id="apkDownload"></p>
         </div>
       </div>
-    </section>
-
-    <section class="panel">
-      <h2>APP 保护</h2>
-      <div class="cards">
+      <div class="cards" style="margin-top:14px">
         <div>
-          <p class="muted">已支持 R8/ProGuard 混淆，生成 protected 版本时会先混淆。</p>
-          <button id="copyObfuscate" type="button">复制混淆打包命令</button>
-          <textarea id="obfuscateCode" readonly></textarea>
+          <p class="muted">给 Android Studio 源码项目用的配置和脚本也保留在这里。</p>
+          <button id="copyConfig" type="button">复制安卓配置</button>
+          <button id="copyInstall" class="ghost" type="button">复制一键接入命令</button>
+          <textarea id="configCode" class="code" readonly></textarea>
+          <textarea id="installCode" class="code" readonly></textarea>
         </div>
         <div>
-          <p class="muted">VMP 壳需要你自己的加固工具。放到 <b>tools\\vmp\\packer.bat</b> 后运行保护脚本即可。</p>
+          <p class="muted">VMP 壳需要你自己的加固工具。放到 <b>tools\\vmp\\packer.bat</b> 后即可由上面的开关调用。</p>
+          <button id="copyObfuscate" type="button">复制混淆打包命令</button>
           <button id="copyVmp" class="ghost" type="button">复制 VMP 加壳命令</button>
+          <button id="installApp" class="ghost" type="button" hidden>安装后台到安卓桌面</button>
+          <textarea id="obfuscateCode" readonly></textarea>
           <textarea id="vmpCode" readonly></textarea>
         </div>
       </div>
@@ -160,10 +224,13 @@ function adminPage() {
 
   <script>
     var cards = [];
+    var selectedApk = null;
     function q(s){ return document.querySelector(s); }
     function apiToken(){ return q("#token").value.trim(); }
     function setStatus(text, isError){ q("#status").textContent = text || ""; q("#status").style.color = isError ? "var(--danger)" : "var(--brand)"; }
+    function setApkStatus(text, isError){ q("#apkStatus").textContent = text || ""; q("#apkStatus").style.color = isError ? "#fecaca" : "#d7fff5"; }
     function serverUrl(){ return location.origin; }
+    function localToolUrl(){ return (q("#localToolUrl").value || "http://127.0.0.1:8789").trim().replace(/\/+$/, ""); }
     function esc(v){ return String(v == null ? "" : v).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
     function dt(s){ return s ? new Date(s * 1000).toLocaleString("zh-CN", {hour12:false}) : "-"; }
     function dur(s){ if (s == null) return "-"; var d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60); if(d)return d+"天"+(h?" "+h+"小时":""); if(h)return h+"小时"+(m?" "+m+"分钟":""); return Math.max(1,m)+"分钟"; }
@@ -190,10 +257,57 @@ function adminPage() {
     async function load(){ cards = (await api("/admin/cards")).cards || []; render(); }
     function updateSnippets(){
       q("#serverUrl").textContent = serverUrl();
+      q("#protectServer").value = q("#protectServer").value || serverUrl();
       q("#configCode").value = 'static final String DEFAULT_BASE_URL = "' + serverUrl() + '";';
       q("#installCode").value = 'powershell -ExecutionPolicy Bypass -File tools\\\\apply-license-box.ps1 -TargetProjectDir "C:\\\\你的安卓项目" -ServerUrl "' + serverUrl() + '"';
       q("#obfuscateCode").value = '.\\\\gradlew.bat assembleShielded';
       q("#vmpCode").value = 'powershell -ExecutionPolicy Bypass -File tools\\\\build-protected.ps1';
+    }
+    function setApkFile(file){
+      if (!file || !file.name.toLowerCase().endsWith(".apk")) return setApkStatus("请选择 APK 文件", true);
+      selectedApk = file;
+      q("#processApk").disabled = false;
+      setApkStatus("已选择：" + file.name + "\\n点击“一键加验证并保护 APK”开始处理。");
+    }
+    async function checkApkTool(){
+      setApkStatus("正在检测电脑 APK 工具...");
+      try {
+        var response = await fetch(localToolUrl() + "/api/status", { method:"GET" });
+        var body = await response.json();
+        if (!body.ok) throw new Error(body.message || "工具未就绪");
+        var urls = (body.accessUrls || []).join("\\n");
+        var tools = body.tools || {};
+        setApkStatus("电脑工具正常\\n访问地址：\\n" + urls + "\\n\\nR8 混淆：" + (tools.r8 ? "可用" : "未找到") + "\\nVMP 壳：" + (tools.vmp ? "可用" : "未安装"));
+      } catch (error) {
+        setApkStatus("电脑 APK 工具没有连上。\\n先在电脑启动工具，再点检测。\\n" + (error.message || error), true);
+      }
+    }
+    async function processApk(){
+      if (!selectedApk) return setApkStatus("请先选择 APK 文件", true);
+      q("#processApk").disabled = true;
+      q("#apkDownload").innerHTML = "";
+      setApkStatus("正在处理 APK...\\n正在加入验证窗口、心跳、MD5、RC4、时间戳，并执行混淆。");
+      var qs = new URLSearchParams({
+        fileName: selectedApk.name,
+        serverUrl: q("#protectServer").value || serverUrl(),
+        appId: q("#protectAppId").value,
+        appSecret: q("#protectSecret").value,
+        rc4Key: q("#protectRc4").value,
+        obfuscate: q("#protectObfuscate").checked ? "1" : "0",
+        vmp: q("#protectVmp").checked ? "1" : "0"
+      });
+      try {
+        var response = await fetch(localToolUrl() + "/api/process?" + qs, { method:"POST", body:selectedApk });
+        var body = await response.json();
+        if (!body.ok) throw new Error(body.message || "处理失败");
+        var url = localToolUrl() + body.file;
+        setApkStatus("处理完成\\n包名：" + body.packageName + "\\n原启动页：" + body.launcher + "\\n统一后台：" + body.serverUrl + "\\n安全传输：卡密心跳 + MD5 签名 + RC4 加密 + 时间戳验证\\n" + body.obfuscationMessage + "\\n" + body.vmpMessage);
+        q("#apkDownload").innerHTML = '<a class="link" href="' + esc(url) + '">下载处理后的 APK：' + esc(body.fileName) + '</a>';
+      } catch (error) {
+        setApkStatus("处理失败：\\n" + (error.message || error) + "\\n\\n如果浏览器拦截了本页调用，请点“单独打开工具”，在电脑工具页面拖 APK。", true);
+      } finally {
+        q("#processApk").disabled = false;
+      }
     }
     q("#token").addEventListener("change", function(){ localStorage.setItem("adminToken", apiToken()); });
     q("#refresh").onclick = function(){ load().then(function(){ setStatus("已刷新"); }).catch(function(e){ setStatus(e.message, true); }); };
@@ -225,6 +339,17 @@ function adminPage() {
     q("#copyInstall").onclick = function(){ copyText(q("#installCode").value); };
     q("#copyObfuscate").onclick = function(){ copyText(q("#obfuscateCode").value); };
     q("#copyVmp").onclick = function(){ copyText(q("#vmpCode").value); };
+    q("#cloudDrop").onclick = function(){ q("#apkFile").click(); };
+    q("#apkFile").onchange = function(){ setApkFile(q("#apkFile").files[0]); };
+    q("#cloudDrop").ondragover = function(e){ e.preventDefault(); q("#cloudDrop").classList.add("drag"); };
+    q("#cloudDrop").ondragleave = function(){ q("#cloudDrop").classList.remove("drag"); };
+    q("#cloudDrop").ondrop = function(e){ e.preventDefault(); q("#cloudDrop").classList.remove("drag"); setApkFile(e.dataTransfer.files[0]); };
+    q("#checkApkTool").onclick = checkApkTool;
+    q("#processApk").onclick = processApk;
+    q("#openApkTool").onclick = function(){ location.href = localToolUrl(); };
+    var installPrompt;
+    window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); installPrompt=e; q("#installApp").hidden=false; });
+    q("#installApp").onclick = async function(){ if(!installPrompt)return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt=null; q("#installApp").hidden=true; };
     q("#deleteAll").onclick = async function(){
       if (!confirm("确认删除全部卡密？这个操作不能恢复。")) return;
       setStatus("正在删除全部卡密...");
