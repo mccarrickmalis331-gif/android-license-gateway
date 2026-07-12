@@ -1,5 +1,5 @@
 const ORIGIN = "https://android-license-worker.mccarrickmalis331.workers.dev";
-const APK_PROCESSOR_ORIGIN = "";
+const APK_PROCESSOR_ORIGIN = "https://android-card-license-server.onrender.com";
 
 export default {
   async fetch(request) {
