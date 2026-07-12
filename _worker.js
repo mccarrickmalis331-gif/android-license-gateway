@@ -24,7 +24,7 @@ export default {
         mobile: true,
         capabilities: ["heartbeat", "md5-signature", "rc4-transport", "timestamp-validation"],
         timestampWindowSeconds: 300,
-        apkToolUrl: APK_PROCESSOR_ORIGIN ? "/apk" : ""
+        apkToolUrl: APK_PROCESSOR_ORIGIN || ""
       }, { headers: corsHeaders() });
     }
     if (url.pathname === "/apk/status" || url.pathname === "/apk/process" || url.pathname.startsWith("/apk/out/")) {
@@ -221,7 +221,7 @@ function adminPage() {
         </div>
         <div>
           <label>云端 APK 处理入口
-            <input id="localToolUrl" value="/apk" readonly>
+            <input id="localToolUrl" value="${APK_PROCESSOR_ORIGIN || "/apk"}" readonly>
           </label>
           <label>统一后台地址
             <input id="protectServer">
@@ -273,7 +273,18 @@ function adminPage() {
     function setStatus(text, isError){ q("#status").textContent = text || ""; q("#status").style.color = isError ? "var(--danger)" : "var(--brand)"; }
     function setApkStatus(text, isError){ q("#apkStatus").textContent = text || ""; q("#apkStatus").style.color = isError ? "#fecaca" : "#d7fff5"; }
     function serverUrl(){ return location.origin; }
-    function localToolUrl(){ return (q("#localToolUrl").value || "/apk").trim().replace(/\\\/+$/, ""); }
+    function localToolUrl(){ return (q("#localToolUrl").value || "${APK_PROCESSOR_ORIGIN || "/apk"}").trim().replace(/\\\/+$/, ""); }
+    function apkApiUrl(path){
+      var base = localToolUrl();
+      if (base.slice(-4) === "/api" || base.slice(-4) === "/apk") return base + path;
+      return base + "/api" + path;
+    }
+    function apkFileUrl(file){
+      if (!file) return "";
+      if (file.indexOf("http://") === 0 || file.indexOf("https://") === 0) return file;
+      var base = localToolUrl().replace(/\/api$/, "").replace(/\/apk$/, "/apk");
+      return base + file;
+    }
     function esc(v){ return String(v == null ? "" : v).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
     function dt(s){ return s ? new Date(s * 1000).toLocaleString("zh-CN", {hour12:false}) : "-"; }
     function dur(s){ if (s == null) return "-"; var d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60); if(d)return d+"天"+(h?" "+h+"小时":""); if(h)return h+"小时"+(m?" "+m+"分钟":""); return Math.max(1,m)+"分钟"; }
@@ -365,7 +376,7 @@ function adminPage() {
     async function checkApkTool(){
       setApkStatus("正在检测云端 APK 处理器...");
       try {
-        var response = await fetch(localToolUrl() + "/status", { method:"GET" });
+        var response = await fetch(apkApiUrl("/status"), { method:"GET" });
         var body = await response.json();
         if (!body.ok) throw new Error(body.message || "工具未就绪");
         apkToolReady = true;
@@ -394,10 +405,10 @@ function adminPage() {
         vmp: q("#protectVmp").checked ? "1" : "0"
       });
       try {
-        var response = await fetch(localToolUrl() + "/process?" + qs, { method:"POST", body:selectedApk });
+        var response = await fetch(apkApiUrl("/process") + "?" + qs, { method:"POST", body:selectedApk });
         var body = await response.json();
         if (!body.ok) throw new Error(body.message || "处理失败");
-        var url = body.file && body.file.startsWith("http") ? body.file : localToolUrl() + body.file;
+        var url = apkFileUrl(body.file);
         setApkStatus("处理完成\\n包名：" + body.packageName + "\\n原启动页：" + body.launcher + "\\n统一后台：" + body.serverUrl + "\\n安全传输：卡密心跳 + MD5 签名 + RC4 加密 + 时间戳验证\\n" + body.obfuscationMessage + "\\n" + body.vmpMessage);
         q("#apkDownload").innerHTML = '<a class="link" href="' + esc(url) + '">下载处理后的 APK：' + esc(body.fileName) + '</a>';
       } catch (error) {
