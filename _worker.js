@@ -282,7 +282,7 @@ function adminPage() {
     function apkFileUrl(file){
       if (!file) return "";
       if (file.indexOf("http://") === 0 || file.indexOf("https://") === 0) return file;
-      var base = localToolUrl().replace(/\/api$/, "").replace(/\/apk$/, "/apk");
+      var base = localToolUrl().replace(/\\\/api$/, "").replace(/\\\/apk$/, "/apk");
       return base + file;
     }
     function esc(v){ return String(v == null ? "" : v).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
