@@ -264,12 +264,16 @@ function adminPage() {
   <script>
     var cards = [];
     var selectedApk = null;
+    var pendingCards = {};
+    var hiddenKeys = {};
+    var deletedBefore = null;
+    var apkToolReady = false;
     function q(s){ return document.querySelector(s); }
     function apiToken(){ return q("#token").value.trim(); }
     function setStatus(text, isError){ q("#status").textContent = text || ""; q("#status").style.color = isError ? "var(--danger)" : "var(--brand)"; }
     function setApkStatus(text, isError){ q("#apkStatus").textContent = text || ""; q("#apkStatus").style.color = isError ? "#fecaca" : "#d7fff5"; }
     function serverUrl(){ return location.origin; }
-    function localToolUrl(){ return (q("#localToolUrl").value || "/apk").trim().replace(/\/+$/, ""); }
+    function localToolUrl(){ return (q("#localToolUrl").value || "/apk").trim().replace(/\\\/+$/, ""); }
     function esc(v){ return String(v == null ? "" : v).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
     function dt(s){ return s ? new Date(s * 1000).toLocaleString("zh-CN", {hour12:false}) : "-"; }
     function dur(s){ if (s == null) return "-"; var d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60); if(d)return d+"天"+(h?" "+h+"小时":""); if(h)return h+"小时"+(m?" "+m+"分钟":""); return Math.max(1,m)+"分钟"; }
@@ -297,17 +301,52 @@ function adminPage() {
         return '<tr><td><div class="key">'+esc(c.cardKey)+'</div>'+actionButton("copy", c.cardKey, "复制")+'</td><td>'+esc(c.status)+'</td><td>'+dur(c.durationSeconds)+'<br><span class="muted">到期：'+dt(c.expiresAt)+'</span><br><span class="muted">剩余：'+(c.remainingSeconds == null ? "-" : dur(c.remainingSeconds))+'</span></td><td>'+esc(c.deviceId || "-")+'<br><span class="muted">版本：'+esc(c.appVersion || "-")+'</span></td><td>激活：'+dt(c.activatedAt)+'<br><span class="muted">心跳：'+dt(c.lastHeartbeatAt)+'</span></td><td>'+esc(c.note || "")+'</td><td><div class="actions">'+controls+'</div></td></tr>';
       }).join("");
     }
-    async function load(){ cards = (await api("/admin/cards")).cards || []; render(); }
-    function mergeCreated(list){
+    function saveUiState(){
+      sessionStorage.setItem("licensePendingCards", JSON.stringify(pendingCards));
+      sessionStorage.setItem("licenseHiddenKeys", JSON.stringify(hiddenKeys));
+      sessionStorage.setItem("licenseDeletedBefore", JSON.stringify(deletedBefore));
+    }
+    function restoreUiState(){
+      try { pendingCards = JSON.parse(sessionStorage.getItem("licensePendingCards") || "{}"); } catch (_) { pendingCards = {}; }
+      try { hiddenKeys = JSON.parse(sessionStorage.getItem("licenseHiddenKeys") || "{}"); } catch (_) { hiddenKeys = {}; }
+      try { deletedBefore = JSON.parse(sessionStorage.getItem("licenseDeletedBefore") || "null"); } catch (_) { deletedBefore = null; }
+    }
+    function reconcile(remoteCards){
+      var now = Date.now();
+      var remoteKeys = {};
+      (remoteCards || []).forEach(function(c){ remoteKeys[c.cardKey] = true; });
+      Object.keys(pendingCards).forEach(function(key){
+        if (remoteKeys[key] || Number(pendingCards[key]._pendingUntil || 0) <= now) delete pendingCards[key];
+      });
+      Object.keys(hiddenKeys).forEach(function(key){ if (Number(hiddenKeys[key]) <= now) delete hiddenKeys[key]; });
+      if (deletedBefore && Number(deletedBefore.expiresAt || 0) <= now) deletedBefore = null;
+      var combined = (remoteCards || []).concat(Object.keys(pendingCards).map(function(key){ return pendingCards[key]; }));
       var seen = {};
-      cards = (list || []).concat(cards).filter(function(c){
-        if (!c || !c.cardKey || seen[c.cardKey]) return false;
+      cards = combined.filter(function(c){
+        if (!c || !c.cardKey || seen[c.cardKey] || hiddenKeys[c.cardKey]) return false;
+        if (deletedBefore && Number(c.createdAt || 0) <= Number(deletedBefore.createdAt || 0)) return false;
         seen[c.cardKey] = true;
         return true;
       });
+      cards.sort(function(a,b){ return Number(b.createdAt || 0) - Number(a.createdAt || 0); });
+      saveUiState();
       render();
     }
-    function delayedSync(){ setTimeout(function(){ load().catch(function(e){ setStatus(e.message, true); }); }, 6000); }
+    async function load(){ reconcile((await api("/admin/cards")).cards || []); }
+    function mergeCreated(list){
+      (list || []).forEach(function(c){
+        if (!c || !c.cardKey) return;
+        c._pendingUntil = Date.now() + 120000;
+        pendingCards[c.cardKey] = c;
+        delete hiddenKeys[c.cardKey];
+      });
+      reconcile(cards);
+    }
+    function delayedSync(){
+      [3000, 12000, 45000].forEach(function(delay){
+        setTimeout(function(){ load().catch(function(e){ setStatus(e.message, true); }); }, delay);
+      });
+    }
     function updateSnippets(){
       q("#serverUrl").textContent = serverUrl();
       q("#protectServer").value = q("#protectServer").value || serverUrl();
@@ -319,8 +358,9 @@ function adminPage() {
     function setApkFile(file){
       if (!file || !file.name.toLowerCase().endsWith(".apk")) return setApkStatus("请选择 APK 文件", true);
       selectedApk = file;
-      q("#processApk").disabled = false;
-      setApkStatus("已选择：" + file.name + "\\n点击“一键加验证并保护 APK”开始处理。");
+      q("#processApk").disabled = !apkToolReady;
+      if (apkToolReady) setApkStatus("已选择：" + file.name + "\\n点击“一键加验证并保护 APK”开始处理。");
+      else setApkStatus("已选择：" + file.name + "\\n卡密后台可正常使用，但云端 APK 处理器尚未部署，暂时不能上传处理 APK。", true);
     }
     async function checkApkTool(){
       setApkStatus("正在检测云端 APK 处理器...");
@@ -328,10 +368,14 @@ function adminPage() {
         var response = await fetch(localToolUrl() + "/status", { method:"GET" });
         var body = await response.json();
         if (!body.ok) throw new Error(body.message || "工具未就绪");
+        apkToolReady = true;
+        q("#processApk").disabled = !selectedApk;
         var urls = (body.accessUrls || []).join("\\n");
         var tools = body.tools || {};
         setApkStatus("云端处理器正常\\n访问地址：\\n" + (urls || "当前后台转发") + "\\n\\nR8 混淆：" + (tools.r8 ? "可用" : "未找到") + "\\nVMP 壳：" + (tools.vmp ? "可用" : "未安装"));
       } catch (error) {
+        apkToolReady = false;
+        q("#processApk").disabled = true;
         setApkStatus("云端 APK 处理器还没有连上。\\n需要先部署 Docker 版 APK 处理器，再把后台里的 APK_PROCESSOR_ORIGIN 填成云端地址。\\n" + (error.message || error), true);
       }
     }
@@ -359,7 +403,7 @@ function adminPage() {
       } catch (error) {
         setApkStatus("处理失败：\\n" + (error.message || error) + "\\n\\n如果提示云端处理器未配置，说明还差部署 Docker 处理器这一步。", true);
       } finally {
-        q("#processApk").disabled = false;
+        q("#processApk").disabled = !selectedApk || !apkToolReady;
       }
     }
     q("#token").addEventListener("change", function(){ localStorage.setItem("adminToken", apiToken()); });
@@ -410,7 +454,11 @@ function adminPage() {
         var result = await api("/admin/cards", { method:"DELETE" });
         q("#created").style.display = "none"; q("#createdText").value = "";
         setStatus("已删除 " + result.deleted + " 张卡密");
+        deletedBefore = { createdAt:Math.floor(Date.now()/1000) + 5, expiresAt:Date.now() + 120000 };
+        pendingCards = {};
+        cards.forEach(function(c){ hiddenKeys[c.cardKey] = Date.now() + 120000; });
         cards = [];
+        saveUiState();
         render();
         delayedSync();
       } catch (err) { setStatus(err.message, true); }
@@ -423,18 +471,24 @@ function adminPage() {
         if (action === "delete") {
           if (!confirm("确认删除 " + key + "？")) return;
           await api("/admin/cards/" + encodeURIComponent(key), { method:"DELETE" });
+          hiddenKeys[key] = Date.now() + 120000;
+          delete pendingCards[key];
           cards = cards.filter(function(c){ return c.cardKey !== key; });
+          saveUiState();
           render();
           delayedSync();
           return setStatus("已删除 " + key);
         } else {
-          await api("/admin/cards/" + encodeURIComponent(key), { method:"PATCH", body:JSON.stringify({ action:action }) });
+          var updated = await api("/admin/cards/" + encodeURIComponent(key), { method:"PATCH", body:JSON.stringify({ action:action }) });
+          cards = cards.map(function(c){ return c.cardKey === key && updated.card ? updated.card : c; });
+          render();
         }
-        await load(); setStatus("操作成功");
+        delayedSync(); setStatus("操作成功");
       } catch (err) { setStatus(err.message, true); }
     };
     updateSnippets();
     q("#token").value = localStorage.getItem("adminToken") || q("#token").value;
+    restoreUiState();
     checkApkTool();
     load().catch(function(e){ setStatus(e.message, true); });
   </script>
