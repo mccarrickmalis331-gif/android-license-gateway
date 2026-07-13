@@ -226,6 +226,9 @@ function adminPage() {
           <label>统一后台地址
             <input id="protectServer">
           </label>
+          <label>卡密购买地址
+            <input id="purchaseUrl" placeholder="不填则 APK 不显示购买入口">
+          </label>
           <div class="cards" style="grid-template-columns:1fr 1fr;margin-top:8px">
             <label>App ID<input id="protectAppId" value="demo_android_app"></label>
             <label>App Secret<input id="protectSecret" type="password" value="change_this_app_secret"></label>
@@ -361,6 +364,7 @@ function adminPage() {
     function updateSnippets(){
       q("#serverUrl").textContent = serverUrl();
       q("#protectServer").value = q("#protectServer").value || serverUrl();
+      q("#purchaseUrl").value = localStorage.getItem("purchaseUrl") || q("#purchaseUrl").value || "";
       q("#configCode").value = 'static final String DEFAULT_BASE_URL = "' + serverUrl() + '";';
       q("#installCode").value = 'powershell -ExecutionPolicy Bypass -File tools\\\\apply-license-box.ps1 -TargetProjectDir "C:\\\\你的安卓项目" -ServerUrl "' + serverUrl() + '"';
       q("#obfuscateCode").value = '.\\\\gradlew.bat assembleShielded';
@@ -398,6 +402,7 @@ function adminPage() {
       var qs = new URLSearchParams({
         fileName: selectedApk.name,
         serverUrl: q("#protectServer").value || serverUrl(),
+        purchaseUrl: q("#purchaseUrl").value.trim(),
         appId: q("#protectAppId").value,
         appSecret: q("#protectSecret").value,
         rc4Key: q("#protectRc4").value,
@@ -418,6 +423,7 @@ function adminPage() {
       }
     }
     q("#token").addEventListener("change", function(){ localStorage.setItem("adminToken", apiToken()); });
+    q("#purchaseUrl").addEventListener("change", function(){ localStorage.setItem("purchaseUrl", q("#purchaseUrl").value.trim()); });
     q("#refresh").onclick = function(){ load().then(function(){ setStatus("已刷新"); }).catch(function(e){ setStatus(e.message, true); }); };
     q("#form").onsubmit = async function(e){
       e.preventDefault();
