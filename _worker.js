@@ -96,8 +96,8 @@ async function proxy(request, sourceUrl) {
 
 const CARD_NAME_NOTE_PREFIX = "[[CARD_NAME:";
 function normalizeGatewayCardName(value) {
-  const name = String(value || "????").trim();
-  return name || "????";
+  const name = String(value || "\u9ed8\u8ba4\u8f6f\u4ef6").trim();
+  return name || "\u9ed8\u8ba4\u8f6f\u4ef6";
 }
 function encodeCardNameNote(cardName, note) {
   return CARD_NAME_NOTE_PREFIX + encodeURIComponent(normalizeGatewayCardName(cardName)) + "]]" + String(note || "");
@@ -109,7 +109,7 @@ function restoreCardName(card) {
     const end = note.indexOf("]]", CARD_NAME_NOTE_PREFIX.length);
     if (end > CARD_NAME_NOTE_PREFIX.length) {
       try { card.cardName = decodeURIComponent(note.slice(CARD_NAME_NOTE_PREFIX.length, end)); }
-      catch (_) { card.cardName = "????"; }
+      catch (_) { card.cardName = "\u9ed8\u8ba4\u8f6f\u4ef6"; }
       card.note = note.slice(end + 2);
     }
   }
@@ -229,6 +229,9 @@ function adminPage() {
 
     <section class="panel">
       <div class="bar">
+        <select id="cardNameFilter" style="width:auto;min-width:190px">
+          <option value="">\u5168\u90e8\u5361\u5bc6\u540d\u79f0</option>
+        </select>
         <button id="refresh" class="ghost" type="button">刷新</button>
         <button id="deleteAll" class="danger" type="button">删除全部卡密</button>
         <span id="count" class="muted"></span>
@@ -354,16 +357,35 @@ function adminPage() {
       if (!response.ok || body.ok === false) throw new Error(body.message || "请求失败");
       return body;
     }
+    function rebuildCardNameFilter(){
+      var select = q("#cardNameFilter");
+      var current = select.value;
+      var names = {};
+      cards.forEach(function(c){ names[cardName(c.cardName)] = true; });
+      var list = Object.keys(names).sort(function(a,b){ return a.localeCompare(b, "zh-CN"); });
+      select.innerHTML = '<option value="">\u5168\u90e8\u5361\u5bc6\u540d\u79f0</option>' + list.map(function(name){
+        return '<option value="' + esc(name) + '">' + esc(name) + '</option>';
+      }).join("");
+      select.value = list.indexOf(current) >= 0 ? current : "";
+    }
+    function filteredCards(){
+      var selected = q("#cardNameFilter").value;
+      return selected ? cards.filter(function(c){ return cardName(c.cardName) === selected; }) : cards.slice();
+    }
     function render(){
-      q("#count").textContent = "共 " + cards.length + " 张";
-      if (!cards.length) {
-        q("#body").innerHTML = '<tr><td colspan="8" class="muted">暂无卡密。生成后会马上显示在这里。</td></tr>';
+      rebuildCardNameFilter();
+      var visibleCards = filteredCards();
+      var selected = q("#cardNameFilter").value;
+      q("#count").textContent = selected ? ("\u5f53\u524d " + visibleCards.length + " \u5f20 / \u5171 " + cards.length + " \u5f20") : ("\u5171 " + cards.length + " \u5f20");
+      q("#deleteAll").textContent = selected ? "\u5220\u9664\u7b5b\u9009\u5361\u5bc6" : "\u5220\u9664\u5168\u90e8\u5361\u5bc6";
+      if (!visibleCards.length) {
+        q("#body").innerHTML = '<tr><td colspan="8" class="muted">\u5f53\u524d\u7b5b\u9009\u4e0b\u6682\u65e0\u5361\u5bc6\u3002</td></tr>';
         return;
       }
-      q("#body").innerHTML = cards.map(function(c){
-        var controls = c.status === "disabled" ? actionButton("enable", c.cardKey, "启用") : actionButton("disable", c.cardKey, "禁用");
-        controls += actionButton("reset", c.cardKey, "重置") + actionButton("delete", c.cardKey, "删除", "danger");
-        return '<tr><td><div class="key">'+esc(c.cardKey)+'</div>'+actionButton("copy", c.cardKey, "复制")+'</td><td><b>'+esc(cardName(c.cardName))+'</b></td><td>'+esc(c.status)+'</td><td>'+dur(c.durationSeconds)+'<br><span class="muted">到期：'+dt(c.expiresAt)+'</span><br><span class="muted">剩余：'+(c.remainingSeconds == null ? "-" : dur(c.remainingSeconds))+'</span></td><td>'+esc(c.deviceId || "-")+'<br><span class="muted">版本：'+esc(c.appVersion || "-")+'</span></td><td>激活：'+dt(c.activatedAt)+'<br><span class="muted">心跳：'+dt(c.lastHeartbeatAt)+'</span></td><td>'+esc(c.note || "")+'</td><td><div class="actions">'+controls+'</div></td></tr>';
+      q("#body").innerHTML = visibleCards.map(function(c){
+        var controls = c.status === "disabled" ? actionButton("enable", c.cardKey, "\u542f\u7528") : actionButton("disable", c.cardKey, "\u7981\u7528");
+        controls += actionButton("reset", c.cardKey, "\u91cd\u7f6e") + actionButton("delete", c.cardKey, "\u5220\u9664", "danger");
+        return '<tr><td><div class="key">'+esc(c.cardKey)+'</div>'+actionButton("copy", c.cardKey, "\u590d\u5236")+'</td><td><b>'+esc(cardName(c.cardName))+'</b></td><td>'+esc(c.status)+'</td><td>'+dur(c.durationSeconds)+'<br><span class="muted">\u5230\u671f\uff1a'+dt(c.expiresAt)+'</span><br><span class="muted">\u5269\u4f59\uff1a'+(c.remainingSeconds == null ? "-" : dur(c.remainingSeconds))+'</span></td><td>'+esc(c.deviceId || "-")+'<br><span class="muted">\u7248\u672c\uff1a'+esc(c.appVersion || "-")+'</span></td><td>\u6fc0\u6d3b\uff1a'+dt(c.activatedAt)+'<br><span class="muted">\u5fc3\u8df3\uff1a'+dt(c.lastHeartbeatAt)+'</span></td><td>'+esc(c.note || "")+'</td><td><div class="actions">'+controls+'</div></td></tr>';
       }).join("");
     }
     function saveUiState(){
@@ -486,6 +508,7 @@ function adminPage() {
     q("#purchaseUrl").addEventListener("change", function(){ localStorage.setItem("purchaseUrl", q("#purchaseUrl").value.trim()); });
     q("#jumpText").addEventListener("change", function(){ localStorage.setItem("jumpText", q("#jumpText").value.trim()); });
     q("#jumpUrl").addEventListener("change", function(){ localStorage.setItem("jumpUrl", q("#jumpUrl").value.trim()); });
+    q("#cardNameFilter").onchange = function(){ render(); };
     q("#refresh").onclick = function(){ load().then(function(){ setStatus("已刷新"); }).catch(function(e){ setStatus(e.message, true); }); };
     q("#form").onsubmit = async function(e){
       e.preventDefault();
@@ -527,18 +550,38 @@ function adminPage() {
     window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); installPrompt=e; q("#installApp").hidden=false; });
     q("#installApp").onclick = async function(){ if(!installPrompt)return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt=null; q("#installApp").hidden=true; };
     q("#deleteAll").onclick = async function(){
-      if (!confirm("确认删除全部卡密？这个操作不能恢复。")) return;
-      setStatus("正在删除全部卡密...");
+      var selectedName = q("#cardNameFilter").value;
+      var targets = filteredCards();
+      if (!targets.length) return setStatus("\u5f53\u524d\u7b5b\u9009\u4e0b\u6ca1\u6709\u53ef\u5220\u9664\u7684\u5361\u5bc6", true);
+      var tip = selectedName
+        ? ("\u786e\u8ba4\u5220\u9664\u540d\u79f0\u4e3a\u300c" + selectedName + "\u300d\u7684 " + targets.length + " \u5f20\u5361\u5bc6\uff1f")
+        : ("\u786e\u8ba4\u5220\u9664\u5168\u90e8 " + targets.length + " \u5f20\u5361\u5bc6\uff1f\u8fd9\u4e2a\u64cd\u4f5c\u4e0d\u80fd\u6062\u590d\u3002");
+      if (!confirm(tip)) return;
+      setStatus(selectedName ? "\u6b63\u5728\u5220\u9664\u7b5b\u9009\u5361\u5bc6..." : "\u6b63\u5728\u5220\u9664\u5168\u90e8\u5361\u5bc6...");
       try {
-        var result = await api("/admin/cards", { method:"DELETE" });
-        q("#created").style.display = "none"; q("#createdText").value = "";
-        setStatus("已删除 " + result.deleted + " 张卡密");
-        deletedBefore = { createdAt:Math.floor(Date.now()/1000) + 5, expiresAt:Date.now() + 120000 };
-        pendingCards = {};
-        cards.forEach(function(c){ hiddenKeys[c.cardKey] = Date.now() + 120000; });
-        cards = [];
+        var deleted = 0;
+        if (!selectedName) {
+          var result = await api("/admin/cards", { method:"DELETE" });
+          deleted = Number(result.deleted || targets.length);
+          q("#created").style.display = "none"; q("#createdText").value = "";
+          deletedBefore = { createdAt:Math.floor(Date.now()/1000) + 5, expiresAt:Date.now() + 120000 };
+          pendingCards = {};
+          cards.forEach(function(c){ hiddenKeys[c.cardKey] = Date.now() + 120000; });
+          cards = [];
+        } else {
+          for (var i = 0; i < targets.length; i += 1) {
+            await api("/admin/cards/" + encodeURIComponent(targets[i].cardKey), { method:"DELETE" });
+            hiddenKeys[targets[i].cardKey] = Date.now() + 120000;
+            delete pendingCards[targets[i].cardKey];
+            deleted += 1;
+          }
+          var removed = {};
+          targets.forEach(function(c){ removed[c.cardKey] = true; });
+          cards = cards.filter(function(c){ return !removed[c.cardKey]; });
+        }
         saveUiState();
         render();
+        setStatus("\u5df2\u5220\u9664 " + deleted + " \u5f20\u5361\u5bc6");
         delayedSync();
       } catch (err) { setStatus(err.message, true); }
     };
