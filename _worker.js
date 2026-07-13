@@ -97,7 +97,8 @@ async function proxy(request, sourceUrl) {
 const CARD_NAME_NOTE_PREFIX = "[[CARD_NAME:";
 function normalizeGatewayCardName(value) {
   const name = String(value || "\u9ed8\u8ba4\u8f6f\u4ef6").trim();
-  return name || "\u9ed8\u8ba4\u8f6f\u4ef6";
+  if (!name || /^\?+$/.test(name)) return "\u9ed8\u8ba4\u8f6f\u4ef6";
+  return name;
 }
 function encodeCardNameNote(cardName, note) {
   return CARD_NAME_NOTE_PREFIX + encodeURIComponent(normalizeGatewayCardName(cardName)) + "]]" + String(note || "");
