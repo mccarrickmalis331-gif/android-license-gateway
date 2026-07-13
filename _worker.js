@@ -50,10 +50,19 @@ async function proxy(request, sourceUrl) {
     const headers = new Headers(request.headers);
     ["host", "cf-connecting-ip", "cf-ipcountry", "cf-ray", "cf-visitor", "content-length", "x-forwarded-host"].forEach((key) => headers.delete(key));
 
+    let body = request.method === "GET" || request.method === "HEAD" ? undefined : request.body;
+    if (request.method === "POST" && sourceUrl.pathname === "/admin/cards") {
+      const payload = await request.clone().json();
+      payload.cardName = normalizeGatewayCardName(payload.cardName);
+      payload.note = encodeCardNameNote(payload.cardName, payload.note);
+      body = JSON.stringify(payload);
+      headers.set("content-type", "application/json");
+    }
+
     const response = await fetch(targetUrl.toString(), {
       method: request.method,
       headers,
-      body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+      body,
       redirect: "manual"
     });
 
@@ -61,6 +70,16 @@ async function proxy(request, sourceUrl) {
     Object.entries(corsHeaders()).forEach(([key, value]) => outHeaders.set(key, value));
     outHeaders.delete("content-encoding");
     outHeaders.delete("content-length");
+
+    if ((sourceUrl.pathname === "/admin/cards") && (request.method === "GET" || request.method === "POST")) {
+      const text = await response.text();
+      let payload;
+      try { payload = text ? JSON.parse(text) : {}; }
+      catch (_) { return new Response(text, { status: response.status, statusText: response.statusText, headers: outHeaders }); }
+      if (Array.isArray(payload.cards)) payload.cards = payload.cards.map(restoreCardName);
+      outHeaders.set("content-type", "application/json; charset=utf-8");
+      return new Response(JSON.stringify(payload), { status: response.status, statusText: response.statusText, headers: outHeaders });
+    }
 
     return new Response(response.body, {
       status: response.status,
@@ -73,6 +92,29 @@ async function proxy(request, sourceUrl) {
       { status: 502, headers: corsHeaders() }
     );
   }
+}
+
+const CARD_NAME_NOTE_PREFIX = "[[CARD_NAME:";
+function normalizeGatewayCardName(value) {
+  const name = String(value || "????").trim();
+  return name || "????";
+}
+function encodeCardNameNote(cardName, note) {
+  return CARD_NAME_NOTE_PREFIX + encodeURIComponent(normalizeGatewayCardName(cardName)) + "]]" + String(note || "");
+}
+function restoreCardName(card) {
+  card = card && typeof card === "object" ? { ...card } : {};
+  const note = String(card.note || "");
+  if (note.startsWith(CARD_NAME_NOTE_PREFIX)) {
+    const end = note.indexOf("]]", CARD_NAME_NOTE_PREFIX.length);
+    if (end > CARD_NAME_NOTE_PREFIX.length) {
+      try { card.cardName = decodeURIComponent(note.slice(CARD_NAME_NOTE_PREFIX.length, end)); }
+      catch (_) { card.cardName = "????"; }
+      card.note = note.slice(end + 2);
+    }
+  }
+  card.cardName = normalizeGatewayCardName(card.cardName);
+  return card;
 }
 
 async function proxyApk(request, sourceUrl) {
