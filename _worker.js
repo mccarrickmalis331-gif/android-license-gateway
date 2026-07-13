@@ -132,11 +132,11 @@ function adminPage() {
     :root{color-scheme:light;--bg:#f5f7fb;--panel:#fff;--line:#dfe5ef;--text:#172033;--muted:#667085;--brand:#1769aa;--danger:#b42318}
     *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,"Microsoft YaHei",sans-serif}
     .wrap{max-width:1180px;margin:auto;padding:22px 14px}.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
-    .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;margin-top:14px}.grid{display:grid;grid-template-columns:100px 120px 120px 1fr 110px;gap:10px;align-items:end}
+    .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;margin-top:14px}.grid{display:grid;grid-template-columns:120px 100px 120px 120px 1fr 110px;gap:10px;align-items:end}
     label{display:block;font-weight:700;font-size:13px} input,select,textarea{width:100%;min-height:38px;border:1px solid var(--line);border-radius:6px;padding:8px;margin-top:6px;background:#fff;color:var(--text)}
     textarea{height:110px;font-family:Consolas,monospace}.code{height:180px}.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     button{min-height:38px;border:0;border-radius:6px;background:var(--brand);color:white;padding:0 13px;cursor:pointer;font-weight:700}button:disabled{opacity:.55;cursor:not-allowed}.ghost{background:#fff;color:var(--text);border:1px solid var(--line)}.danger{background:#fff;color:var(--danger);border:1px solid #f0b8b0}
-    .muted{color:var(--muted);font-size:13px}.status{min-height:22px;margin-top:10px;font-weight:700}.created{display:none}.table{overflow:auto}table{width:100%;min-width:960px;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.key{font-family:Consolas,monospace;font-weight:700}.actions{display:flex;gap:6px;flex-wrap:wrap}
+    .muted{color:var(--muted);font-size:13px}.status{min-height:22px;margin-top:10px;font-weight:700}.created{display:none}.table{overflow:auto}table{width:100%;min-width:1080px;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.key{font-family:Consolas,monospace;font-weight:700}.actions{display:flex;gap:6px;flex-wrap:wrap}
     .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}.security{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.security>div{border:1px solid var(--line);padding:12px;border-radius:6px}.security b{display:block;margin-bottom:5px}.ok{color:#067647}
     .flow{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}.flow>div{border:1px solid var(--line);border-radius:6px;padding:12px;background:#fbfcff}.flow b{display:block;margin-bottom:4px}.drop{border:2px dashed #8aa4c4;border-radius:8px;padding:24px;text-align:center;background:#f8fbff;cursor:pointer}.drop.drag{background:#eaf4ff}.terminal{white-space:pre-wrap;background:#111827;color:#d7fff5;padding:14px;border-radius:8px;min-height:126px}.wide{grid-column:1/-1}.mini{font-size:12px}.link{color:var(--brand);font-weight:700}
     @media(max-width:800px){.grid,.cards,.security,.flow{grid-template-columns:1fr}.wrap{padding:12px}.top h1{font-size:24px}.panel{padding:13px}button{min-height:44px}.table{margin:0 -13px;padding:0 13px}}
@@ -172,6 +172,7 @@ function adminPage() {
     <section class="panel">
       <h2>生成卡密</h2>
       <form id="form" class="grid">
+        <label>卡密名称<input name="cardName" id="cardName" value="默认软件" placeholder="同名软件通用"></label>
         <label>数量<input name="count" type="number" min="1" max="200" value="1"></label>
         <label>时长<input name="duration" type="number" min="1" value="1"></label>
         <label>单位<select name="unit"><option value="minute">分钟</option><option value="hour">小时</option><option value="day" selected>天</option><option value="month">月</option><option value="year">年</option></select></label>
@@ -192,7 +193,7 @@ function adminPage() {
       </div>
       <div class="table">
         <table>
-          <thead><tr><th>卡密</th><th>状态</th><th>有效期</th><th>设备</th><th>激活/心跳</th><th>备注</th><th>操作</th></tr></thead>
+          <thead><tr><th>卡密</th><th>卡密名称</th><th>状态</th><th>有效期</th><th>设备</th><th>激活/心跳</th><th>备注</th><th>操作</th></tr></thead>
           <tbody id="body"></tbody>
         </table>
       </div>
@@ -225,6 +226,9 @@ function adminPage() {
           </label>
           <label>统一后台地址
             <input id="protectServer">
+          </label>
+          <label>卡密名称
+            <input id="protectCardName" value="默认软件" placeholder="必须和生成卡密时一致">
           </label>
           <label>卡密购买地址
             <input id="purchaseUrl" placeholder="不填则 APK 不显示购买入口">
@@ -295,6 +299,7 @@ function adminPage() {
     function esc(v){ return String(v == null ? "" : v).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
     function dt(s){ return s ? new Date(s * 1000).toLocaleString("zh-CN", {hour12:false}) : "-"; }
     function dur(s){ if (s == null) return "-"; var d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60); if(d)return d+"天"+(h?" "+h+"小时":""); if(h)return h+"小时"+(m?" "+m+"分钟":""); return Math.max(1,m)+"分钟"; }
+    function cardName(v){ return (v || "默认软件").trim() || "默认软件"; }
     function actionButton(action, key, text, cls){ return '<button class="'+(cls||"ghost")+'" data-a="'+action+'" data-k="'+esc(key)+'" type="button">'+text+'</button>'; }
     async function copyText(text){ await navigator.clipboard.writeText(text); setStatus("已复制"); }
     async function api(path, options){
@@ -310,13 +315,13 @@ function adminPage() {
     function render(){
       q("#count").textContent = "共 " + cards.length + " 张";
       if (!cards.length) {
-        q("#body").innerHTML = '<tr><td colspan="7" class="muted">暂无卡密。生成后会马上显示在这里。</td></tr>';
+        q("#body").innerHTML = '<tr><td colspan="8" class="muted">暂无卡密。生成后会马上显示在这里。</td></tr>';
         return;
       }
       q("#body").innerHTML = cards.map(function(c){
         var controls = c.status === "disabled" ? actionButton("enable", c.cardKey, "启用") : actionButton("disable", c.cardKey, "禁用");
         controls += actionButton("reset", c.cardKey, "重置") + actionButton("delete", c.cardKey, "删除", "danger");
-        return '<tr><td><div class="key">'+esc(c.cardKey)+'</div>'+actionButton("copy", c.cardKey, "复制")+'</td><td>'+esc(c.status)+'</td><td>'+dur(c.durationSeconds)+'<br><span class="muted">到期：'+dt(c.expiresAt)+'</span><br><span class="muted">剩余：'+(c.remainingSeconds == null ? "-" : dur(c.remainingSeconds))+'</span></td><td>'+esc(c.deviceId || "-")+'<br><span class="muted">版本：'+esc(c.appVersion || "-")+'</span></td><td>激活：'+dt(c.activatedAt)+'<br><span class="muted">心跳：'+dt(c.lastHeartbeatAt)+'</span></td><td>'+esc(c.note || "")+'</td><td><div class="actions">'+controls+'</div></td></tr>';
+        return '<tr><td><div class="key">'+esc(c.cardKey)+'</div>'+actionButton("copy", c.cardKey, "复制")+'</td><td><b>'+esc(cardName(c.cardName))+'</b></td><td>'+esc(c.status)+'</td><td>'+dur(c.durationSeconds)+'<br><span class="muted">到期：'+dt(c.expiresAt)+'</span><br><span class="muted">剩余：'+(c.remainingSeconds == null ? "-" : dur(c.remainingSeconds))+'</span></td><td>'+esc(c.deviceId || "-")+'<br><span class="muted">版本：'+esc(c.appVersion || "-")+'</span></td><td>激活：'+dt(c.activatedAt)+'<br><span class="muted">心跳：'+dt(c.lastHeartbeatAt)+'</span></td><td>'+esc(c.note || "")+'</td><td><div class="actions">'+controls+'</div></td></tr>';
       }).join("");
     }
     function saveUiState(){
@@ -368,6 +373,8 @@ function adminPage() {
     function updateSnippets(){
       q("#serverUrl").textContent = serverUrl();
       q("#protectServer").value = q("#protectServer").value || serverUrl();
+      q("#cardName").value = localStorage.getItem("cardName") || q("#cardName").value || "默认软件";
+      q("#protectCardName").value = localStorage.getItem("cardName") || q("#protectCardName").value || q("#cardName").value || "默认软件";
       q("#purchaseUrl").value = localStorage.getItem("purchaseUrl") || q("#purchaseUrl").value || "";
       q("#jumpText").value = localStorage.getItem("jumpText") || q("#jumpText").value || "";
       q("#jumpUrl").value = localStorage.getItem("jumpUrl") || q("#jumpUrl").value || "";
@@ -408,6 +415,7 @@ function adminPage() {
       var qs = new URLSearchParams({
         fileName: selectedApk.name,
         serverUrl: q("#protectServer").value || serverUrl(),
+        cardName: cardName(q("#protectCardName").value),
         purchaseUrl: q("#purchaseUrl").value.trim(),
         jumpText: q("#jumpText").value.trim(),
         jumpUrl: q("#jumpUrl").value.trim(),
@@ -431,6 +439,8 @@ function adminPage() {
       }
     }
     q("#token").addEventListener("change", function(){ localStorage.setItem("adminToken", apiToken()); });
+    q("#cardName").addEventListener("change", function(){ localStorage.setItem("cardName", cardName(q("#cardName").value)); q("#protectCardName").value = cardName(q("#cardName").value); });
+    q("#protectCardName").addEventListener("change", function(){ localStorage.setItem("cardName", cardName(q("#protectCardName").value)); q("#cardName").value = cardName(q("#protectCardName").value); });
     q("#purchaseUrl").addEventListener("change", function(){ localStorage.setItem("purchaseUrl", q("#purchaseUrl").value.trim()); });
     q("#jumpText").addEventListener("change", function(){ localStorage.setItem("jumpText", q("#jumpText").value.trim()); });
     q("#jumpUrl").addEventListener("change", function(){ localStorage.setItem("jumpUrl", q("#jumpUrl").value.trim()); });
@@ -440,7 +450,7 @@ function adminPage() {
       var btn = q("#createBtn");
       if (btn.disabled) return;
       var f = new FormData(e.target);
-      var payload = { count:Number(f.get("count")), duration:Number(f.get("duration")), unit:f.get("unit"), note:f.get("note") };
+      var payload = { cardName:cardName(f.get("cardName")), count:Number(f.get("count")), duration:Number(f.get("duration")), unit:f.get("unit"), note:f.get("note") };
       if (!Number.isFinite(payload.count) || payload.count < 1 || payload.count > 200) return setStatus("数量必须是 1-200", true);
       if (!Number.isFinite(payload.duration) || payload.duration < 1) return setStatus("时长必须大于 0", true);
       btn.disabled = true; btn.textContent = "生成中"; setStatus("正在生成卡密...");
