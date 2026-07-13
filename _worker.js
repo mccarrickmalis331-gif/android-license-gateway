@@ -230,6 +230,10 @@ function adminPage() {
             <input id="purchaseUrl" placeholder="不填则 APK 不显示购买入口">
           </label>
           <div class="cards" style="grid-template-columns:1fr 1fr;margin-top:8px">
+            <label>跳转文字<input id="jumpText" placeholder="例如：官方网站"></label>
+            <label>跳转网址<input id="jumpUrl" placeholder="不填则 APK 不显示"></label>
+          </div>
+          <div class="cards" style="grid-template-columns:1fr 1fr;margin-top:8px">
             <label>App ID<input id="protectAppId" value="demo_android_app"></label>
             <label>App Secret<input id="protectSecret" type="password" value="change_this_app_secret"></label>
           </div>
@@ -365,6 +369,8 @@ function adminPage() {
       q("#serverUrl").textContent = serverUrl();
       q("#protectServer").value = q("#protectServer").value || serverUrl();
       q("#purchaseUrl").value = localStorage.getItem("purchaseUrl") || q("#purchaseUrl").value || "";
+      q("#jumpText").value = localStorage.getItem("jumpText") || q("#jumpText").value || "";
+      q("#jumpUrl").value = localStorage.getItem("jumpUrl") || q("#jumpUrl").value || "";
       q("#configCode").value = 'static final String DEFAULT_BASE_URL = "' + serverUrl() + '";';
       q("#installCode").value = 'powershell -ExecutionPolicy Bypass -File tools\\\\apply-license-box.ps1 -TargetProjectDir "C:\\\\你的安卓项目" -ServerUrl "' + serverUrl() + '"';
       q("#obfuscateCode").value = '.\\\\gradlew.bat assembleShielded';
@@ -403,6 +409,8 @@ function adminPage() {
         fileName: selectedApk.name,
         serverUrl: q("#protectServer").value || serverUrl(),
         purchaseUrl: q("#purchaseUrl").value.trim(),
+        jumpText: q("#jumpText").value.trim(),
+        jumpUrl: q("#jumpUrl").value.trim(),
         appId: q("#protectAppId").value,
         appSecret: q("#protectSecret").value,
         rc4Key: q("#protectRc4").value,
@@ -424,6 +432,8 @@ function adminPage() {
     }
     q("#token").addEventListener("change", function(){ localStorage.setItem("adminToken", apiToken()); });
     q("#purchaseUrl").addEventListener("change", function(){ localStorage.setItem("purchaseUrl", q("#purchaseUrl").value.trim()); });
+    q("#jumpText").addEventListener("change", function(){ localStorage.setItem("jumpText", q("#jumpText").value.trim()); });
+    q("#jumpUrl").addEventListener("change", function(){ localStorage.setItem("jumpUrl", q("#jumpUrl").value.trim()); });
     q("#refresh").onclick = function(){ load().then(function(){ setStatus("已刷新"); }).catch(function(e){ setStatus(e.message, true); }); };
     q("#form").onsubmit = async function(e){
       e.preventDefault();
