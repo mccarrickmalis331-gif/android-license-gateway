@@ -488,7 +488,7 @@ function adminPage() {
         var response = await fetch(apkApiUrl("/jobs/" + encodeURIComponent(jobId)), { cache:"no-store" });
         var job = await response.json();
         if (!response.ok) throw new Error(job.message || "读取 APK 处理进度失败");
-        setApkStatus((job.progress || "云端正在处理 APK") + "\n\n任务号：" + jobId);
+        setApkStatus((job.progress || "云端正在处理 APK") + "\\n\\n任务号：" + jobId);
         if (job.status === "done" && job.result) return job.result;
         if (job.status === "failed") throw new Error(job.message || "APK 处理失败");
       }
