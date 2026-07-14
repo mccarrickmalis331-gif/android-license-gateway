@@ -27,7 +27,7 @@ export default {
         apkToolUrl: APK_PROCESSOR_ORIGIN || ""
       }, { headers: corsHeaders() });
     }
-    if (url.pathname === "/apk/status" || url.pathname === "/apk/process" || url.pathname.startsWith("/apk/out/")) {
+      if (url.pathname === "/apk/status" || url.pathname === "/apk/process" || url.pathname.startsWith("/apk/jobs/") || url.pathname.startsWith("/apk/out/")) {
       return proxyApk(request, url);
     }
     if (request.method === "GET" && url.pathname === "/") {
@@ -127,9 +127,10 @@ async function proxyApk(request, sourceUrl) {
   }
 
   try {
-    let pathname = "/api/process";
-    if (sourceUrl.pathname === "/apk/status") pathname = "/api/status";
-    if (sourceUrl.pathname.startsWith("/apk/out/")) pathname = "/out/" + sourceUrl.pathname.slice("/apk/out/".length);
+      let pathname = "/api/process";
+      if (sourceUrl.pathname === "/apk/status") pathname = "/api/status";
+      if (sourceUrl.pathname.startsWith("/apk/jobs/")) pathname = "/api/jobs/" + sourceUrl.pathname.slice("/apk/jobs/".length);
+      if (sourceUrl.pathname.startsWith("/apk/out/")) pathname = "/out/" + sourceUrl.pathname.slice("/apk/out/".length);
     const targetUrl = new URL(pathname + sourceUrl.search, APK_PROCESSOR_ORIGIN);
     const headers = new Headers(request.headers);
     ["host", "cf-connecting-ip", "cf-ipcountry", "cf-ray", "cf-visitor", "content-length", "x-forwarded-host"].forEach((key) => headers.delete(key));
@@ -479,6 +480,20 @@ function adminPage() {
         setApkStatus("云端 APK 处理器还没有连上。\\n需要先部署 Docker 版 APK 处理器，再把后台里的 APK_PROCESSOR_ORIGIN 填成云端地址。\\n" + (error.message || error), true);
       }
     }
+    function sleep(ms){ return new Promise(function(resolve){ setTimeout(resolve, ms); }); }
+    async function waitForApkJob(jobId){
+      var started = Date.now();
+      while (Date.now() - started < 20 * 60 * 1000) {
+        await sleep(2000);
+        var response = await fetch(apkApiUrl("/jobs/" + encodeURIComponent(jobId)), { cache:"no-store" });
+        var job = await response.json();
+        if (!response.ok) throw new Error(job.message || "读取 APK 处理进度失败");
+        setApkStatus((job.progress || "云端正在处理 APK") + "\n\n任务号：" + jobId);
+        if (job.status === "done" && job.result) return job.result;
+        if (job.status === "failed") throw new Error(job.message || "APK 处理失败");
+      }
+      throw new Error("APK 处理超过 20 分钟，请重新提交");
+    }
     async function processApk(){
       if (!selectedApk) return setApkStatus("请先选择 APK 文件", true);
       q("#processApk").disabled = true;
@@ -501,6 +516,7 @@ function adminPage() {
         var response = await fetch(apkApiUrl("/process") + "?" + qs, { method:"POST", body:selectedApk });
         var body = await response.json();
         if (!body.ok) throw new Error(body.message || "处理失败");
+        if (body.queued && body.jobId) body = await waitForApkJob(body.jobId);
         var url = apkFileUrl(body.file);
         setApkStatus("处理完成\\n包名：" + body.packageName + "\\n原启动页：" + body.launcher + "\\n统一后台：" + body.serverUrl + "\\n安全传输：卡密心跳 + MD5 签名 + RC4 加密 + 时间戳验证\\n" + body.obfuscationMessage + "\\n" + body.vmpMessage);
         q("#apkDownload").innerHTML = '<a class="link" href="' + esc(url) + '">下载处理后的 APK：' + esc(body.fileName) + '</a>';
