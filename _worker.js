@@ -320,6 +320,7 @@ function adminPage() {
 
   <script>
     var cards = [];
+    var selectedCardNameFilter = "";
     var selectedApk = null;
     var pendingCards = {};
     var hiddenKeys = {};
@@ -360,23 +361,29 @@ function adminPage() {
     }
     function rebuildCardNameFilter(){
       var select = q("#cardNameFilter");
-      var current = select.value;
+      var current = selectedCardNameFilter;
       var names = {};
       cards.forEach(function(c){ names[cardName(c.cardName)] = true; });
       var list = Object.keys(names).sort(function(a,b){ return a.localeCompare(b, "zh-CN"); });
       select.innerHTML = '<option value="">\u5168\u90e8\u5361\u5bc6\u540d\u79f0</option>' + list.map(function(name){
         return '<option value="' + esc(name) + '">' + esc(name) + '</option>';
       }).join("");
-      select.value = list.indexOf(current) >= 0 ? current : "";
+      if (list.indexOf(current) >= 0) {
+        select.value = current;
+      } else {
+        selectedCardNameFilter = "";
+        select.value = "";
+      }
     }
     function filteredCards(){
-      var selected = q("#cardNameFilter").value;
-      return selected ? cards.filter(function(c){ return cardName(c.cardName) === selected; }) : cards.slice();
+      return selectedCardNameFilter
+        ? cards.filter(function(c){ return cardName(c.cardName) === selectedCardNameFilter; })
+        : cards.slice();
     }
     function render(){
       rebuildCardNameFilter();
       var visibleCards = filteredCards();
-      var selected = q("#cardNameFilter").value;
+      var selected = selectedCardNameFilter;
       q("#count").textContent = selected ? ("\u5f53\u524d " + visibleCards.length + " \u5f20 / \u5171 " + cards.length + " \u5f20") : ("\u5171 " + cards.length + " \u5f20");
       q("#deleteAll").textContent = selected ? "\u5220\u9664\u7b5b\u9009\u5361\u5bc6" : "\u5220\u9664\u5168\u90e8\u5361\u5bc6";
       if (!visibleCards.length) {
@@ -509,7 +516,7 @@ function adminPage() {
     q("#purchaseUrl").addEventListener("change", function(){ localStorage.setItem("purchaseUrl", q("#purchaseUrl").value.trim()); });
     q("#jumpText").addEventListener("change", function(){ localStorage.setItem("jumpText", q("#jumpText").value.trim()); });
     q("#jumpUrl").addEventListener("change", function(){ localStorage.setItem("jumpUrl", q("#jumpUrl").value.trim()); });
-    q("#cardNameFilter").onchange = function(){ render(); };
+    q("#cardNameFilter").onchange = function(){ selectedCardNameFilter = this.value; render(); };
     q("#refresh").onclick = function(){ load().then(function(){ setStatus("已刷新"); }).catch(function(e){ setStatus(e.message, true); }); };
     q("#form").onsubmit = async function(e){
       e.preventDefault();
@@ -551,34 +558,31 @@ function adminPage() {
     window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); installPrompt=e; q("#installApp").hidden=false; });
     q("#installApp").onclick = async function(){ if(!installPrompt)return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt=null; q("#installApp").hidden=true; };
     q("#deleteAll").onclick = async function(){
-      var selectedName = q("#cardNameFilter").value;
+      var selectedName = selectedCardNameFilter;
       var targets = filteredCards();
       if (!targets.length) return setStatus("\u5f53\u524d\u7b5b\u9009\u4e0b\u6ca1\u6709\u53ef\u5220\u9664\u7684\u5361\u5bc6", true);
+      if (selectedName && targets.some(function(c){ return cardName(c.cardName) !== selectedName; })) {
+        return setStatus("\u7b5b\u9009\u72b6\u6001\u5f02\u5e38\uff0c\u5df2\u53d6\u6d88\u5220\u9664", true);
+      }
       var tip = selectedName
         ? ("\u786e\u8ba4\u5220\u9664\u540d\u79f0\u4e3a\u300c" + selectedName + "\u300d\u7684 " + targets.length + " \u5f20\u5361\u5bc6\uff1f")
-        : ("\u786e\u8ba4\u5220\u9664\u5168\u90e8 " + targets.length + " \u5f20\u5361\u5bc6\uff1f\u8fd9\u4e2a\u64cd\u4f5c\u4e0d\u80fd\u6062\u590d\u3002");
+        : ("\u786e\u8ba4\u5220\u9664\u5f53\u524d\u5217\u8868\u7684 " + targets.length + " \u5f20\u5361\u5bc6\uff1f\u8fd9\u4e2a\u64cd\u4f5c\u4e0d\u80fd\u6062\u590d\u3002");
       if (!confirm(tip)) return;
-      setStatus(selectedName ? "\u6b63\u5728\u5220\u9664\u7b5b\u9009\u5361\u5bc6..." : "\u6b63\u5728\u5220\u9664\u5168\u90e8\u5361\u5bc6...");
+      setStatus("\u6b63\u5728\u9010\u5f20\u5220\u9664\u5f53\u524d\u7b5b\u9009\u5361\u5bc6...");
       try {
         var deleted = 0;
+        for (var i = 0; i < targets.length; i += 1) {
+          await api("/admin/cards/" + encodeURIComponent(targets[i].cardKey), { method:"DELETE" });
+          hiddenKeys[targets[i].cardKey] = Date.now() + 120000;
+          delete pendingCards[targets[i].cardKey];
+          deleted += 1;
+        }
+        var removed = {};
+        targets.forEach(function(c){ removed[c.cardKey] = true; });
+        cards = cards.filter(function(c){ return !removed[c.cardKey]; });
         if (!selectedName) {
-          var result = await api("/admin/cards", { method:"DELETE" });
-          deleted = Number(result.deleted || targets.length);
-          q("#created").style.display = "none"; q("#createdText").value = "";
-          deletedBefore = { createdAt:Math.floor(Date.now()/1000) + 5, expiresAt:Date.now() + 120000 };
-          pendingCards = {};
-          cards.forEach(function(c){ hiddenKeys[c.cardKey] = Date.now() + 120000; });
-          cards = [];
-        } else {
-          for (var i = 0; i < targets.length; i += 1) {
-            await api("/admin/cards/" + encodeURIComponent(targets[i].cardKey), { method:"DELETE" });
-            hiddenKeys[targets[i].cardKey] = Date.now() + 120000;
-            delete pendingCards[targets[i].cardKey];
-            deleted += 1;
-          }
-          var removed = {};
-          targets.forEach(function(c){ removed[c.cardKey] = true; });
-          cards = cards.filter(function(c){ return !removed[c.cardKey]; });
+          q("#created").style.display = "none";
+          q("#createdText").value = "";
         }
         saveUiState();
         render();
