@@ -246,7 +246,7 @@ function adminPage() {
     </section>
 
     <section class="panel">
-      <div class="bar"><h2 style="margin:0">验证 + APK 保护一体化</h2><span class="muted">生成卡密、注入验证框、混淆、可选 VMP 壳放在同一套后台里</span></div>
+      <div class="bar"><h2 style="margin:0">验证 + APK 保护一体化</h2><span class="muted">生成卡密、注入验证框、R8 混淆和内置 VMP+ 放在同一套后台里</span></div>
       <div class="flow">
         <div><b>1. 生成卡密</b><span class="muted">上方直接生成各种时长的卡密。</span></div>
         <div><b>2. 拖入 APK</b><span class="muted">选择已经编译好的 APK 文件。</span></div>
@@ -291,7 +291,7 @@ function adminPage() {
             <input id="protectRc4" type="password" value="change_this_rc4_key">
           </label>
           <p><label><input id="protectObfuscate" type="checkbox" checked> 使用 R8 混淆验证模块</label></p>
-          <p><label><input id="protectVmp" type="checkbox"> 完成后调用 VMP 壳</label></p>
+          <p><label><input id="protectVmp" type="checkbox"> 启用内置魔改 VMP+（验证模块）</label></p>
         </div>
         <div class="wide">
           <div id="apkStatus" class="terminal">等待 APK...</div>
@@ -307,9 +307,9 @@ function adminPage() {
           <textarea id="installCode" class="code" readonly></textarea>
         </div>
         <div>
-          <p class="muted">VMP 壳需要你自己的加固工具。放到 <b>tools\\vmp\\packer.bat</b> 后即可由上面的开关调用。</p>
+          <p class="muted">VMP+ 已内置到云端处理器：加密配置字符串、虚拟机判断验证结果、反调试，并校验原始 DEX 完整性，无需额外安装加壳工具。</p>
           <button id="copyObfuscate" type="button">复制混淆打包命令</button>
-          <button id="copyVmp" class="ghost" type="button">复制 VMP 加壳命令</button>
+          <button id="copyVmp" class="ghost" type="button">复制本地 VMP+ 处理命令</button>
           <button id="installApp" class="ghost" type="button" hidden>安装后台到安卓桌面</button>
           <textarea id="obfuscateCode" readonly></textarea>
           <textarea id="vmpCode" readonly></textarea>
@@ -472,7 +472,7 @@ function adminPage() {
         q("#processApk").disabled = !selectedApk;
         var urls = (body.accessUrls || []).join("\\n");
         var tools = body.tools || {};
-        setApkStatus("云端处理器正常\\n访问地址：\\n" + (urls || "当前后台转发") + "\\n\\nR8 混淆：" + (tools.r8 ? "可用" : "未找到") + "\\nVMP 壳：" + (tools.vmp ? "可用" : "未安装"));
+        setApkStatus("云端处理器正常\\n访问地址：\\n" + (urls || "当前后台转发") + "\\n\\nR8 混淆：" + (tools.r8 ? "可用" : "未找到") + "\\n内置 VMP+：" + (tools.vmp ? "可用" : "未启用"));
       } catch (error) {
         apkToolReady = false;
         q("#processApk").disabled = true;
