@@ -247,11 +247,11 @@ function adminPage() {
     </section>
 
     <section class="panel">
-      <div class="bar"><h2 style="margin:0">验证 + APK 保护一体化</h2><span class="muted">生成卡密、注入验证框、R8 混淆和内置 VMP+ 放在同一套后台里</span></div>
+      <div class="bar"><h2 style="margin:0">验证 + APK 保护一体化</h2><span class="muted">生成卡密、注入验证框、R8 混淆和整包 VMP 加固放在同一套后台里</span></div>
       <div class="flow">
         <div><b>1. 生成卡密</b><span class="muted">上方直接生成各种时长的卡密。</span></div>
         <div><b>2. 拖入 APK</b><span class="muted">选择已经编译好的 APK 文件。</span></div>
-        <div><b>3. 加验证和混淆</b><span class="muted">自动加入卡密窗口、心跳、MD5、RC4、时间戳。</span></div>
+        <div><b>3. 验证与整包加固</b><span class="muted">加入卡密验证后抽取应用 DEX 函数代码并生成随机壳。</span></div>
         <div><b>4. 下载成品</b><span class="muted">输出重新签名后的保护 APK。</span></div>
       </div>
       <div class="cards" style="margin-top:14px">
@@ -293,6 +293,7 @@ function adminPage() {
           </label>
           <p><label><input id="protectObfuscate" type="checkbox" checked> 使用 R8 混淆验证模块</label></p>
           <p><label><input id="protectVmp" type="checkbox"> 启用内置魔改 VMP+（验证模块）</label></p>
+          <p><label><input id="protectFullVmp" type="checkbox" checked> 启用整包 VMP 兼容模式（Android 5–16）</label></p>
         </div>
         <div class="wide">
           <div id="apkStatus" class="terminal">等待 APK...</div>
@@ -308,7 +309,7 @@ function adminPage() {
           <textarea id="installCode" class="code" readonly></textarea>
         </div>
         <div>
-          <p class="muted">VMP+ 已内置到云端处理器：加密配置字符串、虚拟机判断验证结果、反调试，并校验原始 DEX 完整性，无需额外安装加壳工具。</p>
+          <p class="muted">整包模式会保护应用 DEX：函数代码抽取与运行时回填、随机壳包、原生壳段加密、垃圾类、签名证书自校验，并按原 APK 自动裁剪 ABI。</p>
           <button id="copyObfuscate" type="button">复制混淆打包命令</button>
           <button id="copyVmp" class="ghost" type="button">复制本地 VMP+ 处理命令</button>
           <button id="installApp" class="ghost" type="button" hidden>安装后台到安卓桌面</button>
@@ -473,7 +474,7 @@ function adminPage() {
         q("#processApk").disabled = !selectedApk;
         var urls = (body.accessUrls || []).join("\\n");
         var tools = body.tools || {};
-        setApkStatus("云端处理器正常\\n访问地址：\\n" + (urls || "当前后台转发") + "\\n\\nR8 混淆：" + (tools.r8 ? "可用" : "未找到") + "\\n内置 VMP+：" + (tools.vmp ? "可用" : "未启用"));
+        setApkStatus("云端处理器正常\\n访问地址：\\n" + (urls || "当前后台转发") + "\\n\\nR8 混淆：" + (tools.r8 ? "可用" : "未找到") + "\\n验证模块 VMP+：" + (tools.vmp ? "可用" : "未启用") + "\\n整包 VMP：" + (tools.fullVmp ? "可用" : "未安装"));
       } catch (error) {
         apkToolReady = false;
         q("#processApk").disabled = true;
@@ -498,7 +499,7 @@ function adminPage() {
       if (!selectedApk) return setApkStatus("请先选择 APK 文件", true);
       q("#processApk").disabled = true;
       q("#apkDownload").innerHTML = "";
-      setApkStatus("正在处理 APK...\\n正在加入验证窗口、心跳、MD5、RC4、时间戳，并执行混淆。");
+      setApkStatus("正在处理 APK...\\n正在加入验证窗口、安全传输和 R8 混淆" + (q("#protectFullVmp").checked ? "，随后执行整包 VMP 加固。" : "。"));
       var qs = new URLSearchParams({
         fileName: selectedApk.name,
         serverUrl: q("#protectServer").value || serverUrl(),
@@ -510,7 +511,8 @@ function adminPage() {
         appSecret: q("#protectSecret").value,
         rc4Key: q("#protectRc4").value,
         obfuscate: q("#protectObfuscate").checked ? "1" : "0",
-        vmp: q("#protectVmp").checked ? "1" : "0"
+        vmp: q("#protectVmp").checked ? "1" : "0",
+        fullVmp: q("#protectFullVmp").checked ? "1" : "0"
       });
       try {
         var response = await fetch(apkApiUrl("/process") + "?" + qs, { method:"POST", body:selectedApk });
